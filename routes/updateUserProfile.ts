@@ -11,7 +11,6 @@ import * as security from '../lib/insecurity'
 import { UserModel } from '../models/user'
 import * as utils from '../lib/utils'
 import config from 'config'
-import { tokenCookieOptions } from './logout'
 
 export function updateUserProfile () {
   return async (req: Request, res: Response, next: NextFunction) => {
@@ -40,7 +39,7 @@ export function updateUserProfile () {
       const userWithStatus = utils.queryResultToJson(savedUser)
       const updatedToken = security.authorize(userWithStatus)
       security.authenticatedUsers.put(updatedToken, userWithStatus)
-      res.cookie('token', updatedToken, tokenCookieOptions)
+      res.cookie('token', updatedToken, security.tokenCookieOptions)
       res.location(process.env.BASE_PATH + '/profile')
       res.redirect(process.env.BASE_PATH + '/profile')
     } catch (error) {

@@ -5,9 +5,7 @@
 
 import { type Request, type Response } from 'express'
 
-// The attributes must match those used when the cookie is set; browsers only remove a cookie
-// that a Set-Cookie header identifies with the same name, domain and path.
-export const tokenCookieOptions = { httpOnly: true, secure: true, sameSite: 'strict' } as const
+import { tokenCookieOptions } from '../lib/insecurity'
 
 export function logout () {
   return (req: Request, res: Response) => {

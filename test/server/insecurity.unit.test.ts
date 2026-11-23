@@ -9,7 +9,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import * as security from '../../lib/insecurity'
 import type { UserModel } from '@juice-shop/models/user'
-import type { Request } from 'express'
+import type { Request, Response } from 'express'
 
 void describe('insecurity', () => {
   void describe('cutOffPoisonNullByte', () => {
@@ -282,6 +282,21 @@ void describe('insecurity', () => {
   })
 
   void describe('middlewares', () => {
+    void it('restores an unknown valid token with hardened cookie attributes', () => {
+      const user = { data: { id: 99999 } }
+      const token = security.authorize(user)
+      const req = { cookies: { token } } as unknown as Request
+      let cookieArgs: unknown[] = []
+      let nextCalled = false
+      const res = { cookie: (...args: unknown[]) => { cookieArgs = args } } as unknown as Response
+      security.updateAuthenticatedUsers()(req, res, () => { nextCalled = true })
+      assert.deepEqual(cookieArgs, ['token', token, { httpOnly: true, secure: true, sameSite: 'strict' }])
+      assert.deepEqual(security.authenticatedUsers.get(token)?.data, user.data)
+      assert.ok(nextCalled)
+      delete security.authenticatedUsers.tokenMap[token]
+      delete security.authenticatedUsers.idMap[user.data.id]
+    })
+
     void it('isAccounting should allow next() for accounting role', () => {
       const user = { data: { role: 'accounting' } }
       const token = security.authorize(user)
