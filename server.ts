@@ -365,7 +365,7 @@ function configureApp (app: ReturnType<typeof express>, seq: typeof sequelize) {
     audit_file: 'logs/audit.json',
     frequency: 'daily',
     verbose: false,
-    max_logs: '2d'
+    max_logs: '365d'
   })
   app.use(morgan('combined', { stream: accessLogStream }))
 
@@ -633,7 +633,7 @@ function configureApp (app: ReturnType<typeof express>, seq: typeof sequelize) {
 
   /* Custom Restful API */
   app.post('/rest/user/login', login())
-  app.get('/rest/user/change-password', utils.asyncHandler(changePassword()))
+  app.post('/rest/user/change-password', utils.asyncHandler(changePassword()))
   app.post('/rest/user/reset-password', utils.asyncHandler(resetPassword()))
   app.get('/rest/user/security-question', utils.asyncHandler(securityQuestion()))
   app.get('/rest/user/whoami', utils.asyncHandler(retrieveLoggedInUser()))

@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: MIT
  */
 import express, { type NextFunction, type Request, type Response } from 'express'
+import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import config from 'config'
 import { themes } from '../views/themes/themes'
@@ -16,6 +17,19 @@ import * as challengeUtils from '../lib/challengeUtils'
 import { challenges } from '../data/datacache'
 import * as security from '../lib/insecurity'
 import { UserModel } from '../models/user'
+import { sequelize } from '../models'
+import { AddressModel } from '../models/address'
+import { BasketModel } from '../models/basket'
+import { BasketItemModel } from '../models/basketitem'
+import { CardModel } from '../models/card'
+import { ComplaintModel } from '../models/complaint'
+import { FeedbackModel } from '../models/feedback'
+import { ImageCaptchaModel } from '../models/imageCaptcha'
+import { MemoryModel } from '../models/memory'
+import { PasskeyModel } from '../models/passkey'
+import { RecycleModel } from '../models/recycle'
+import { WalletModel } from '../models/wallet'
+import * as db from '../data/mongodb'
 
 const entities = new Entities()
 
@@ -80,10 +94,61 @@ router.post('/', (req: Request<Record<string, unknown>, Record<string, unknown>,
     }
 
     try {
-      await PrivacyRequestModel.create({
-        UserId: loggedInUser.data.id,
-        deletionRequested: true
+      const userId = loggedInUser.data.id
+      const email = loggedInUser.data.email
+      const obscuredEmail = email.replace(/[aeiou]/gi, '*')
+      const orderPrefix = security.hash(email).slice(0, 4) + '-'
+      const accountEmails = await UserModel.findAll({ attributes: ['id', 'email', 'profileImage'], paranoid: false })
+      if (accountEmails.some(account => account.id !== userId && account.email &&
+          account.email.replace(/[aeiou]/gi, '*') === obscuredEmail &&
+          security.hash(account.email).slice(0, 4) + '-' === orderPrefix)) {
+        throw new Error('Cannot safely distinguish this account’s orders; manual erasure is required')
+      }
+      const orders: Array<{ _id: string, orderId: string }> = await db.ordersCollection.find({ email: obscuredEmail })
+      const ownOrders = orders.filter(order => order.orderId.startsWith(orderPrefix))
+      const memories = await MemoryModel.findAll({ where: { UserId: userId } })
+      const uploadRoot = path.resolve('frontend/dist/frontend/assets/public/images/uploads')
+      const uploadPaths = memories.map(memory => memory.imagePath)
+      if (loggedInUser.data.profileImage) uploadPaths.push(loggedInUser.data.profileImage)
+      for (const image of uploadPaths) {
+        const file = path.resolve('frontend/dist/frontend', image.replace(/^\/+/, ''))
+        if (path.dirname(file) === uploadRoot && !['default.svg', 'defaultAdmin.png'].includes(path.basename(file))) {
+          const shared = await MemoryModel.count({ where: { imagePath: image } })
+          const sharedProfile = accountEmails.some(account => account.id !== userId && account.profileImage === image)
+          if (shared <= 1 && !sharedProfile) await fs.rm(file, { force: true })
+        }
+      }
+      for (const order of ownOrders) {
+        if (/^[a-f0-9]{4}-[a-f0-9]+$/i.test(order.orderId)) {
+          await fs.rm(path.join('ftp', `order_${order.orderId}.pdf`), { force: true })
+        }
+        await db.ordersCollection.remove({ _id: order._id })
+      }
+      await db.reviewsCollection.remove({ author: email })
+      await sequelize.transaction(async transaction => {
+        const where = { UserId: userId }
+        const baskets = await BasketModel.findAll({ where, transaction })
+        for (const basket of baskets) {
+          await BasketItemModel.destroy({ where: { BasketId: basket.id }, transaction })
+        }
+        await RecycleModel.destroy({ where, transaction })
+        await AddressModel.destroy({ where, force: true, transaction })
+        await BasketModel.destroy({ where, transaction })
+        await CardModel.destroy({ where, force: true, transaction })
+        await ComplaintModel.destroy({ where, transaction })
+        await FeedbackModel.destroy({ where, transaction })
+        await ImageCaptchaModel.destroy({ where, transaction })
+        await MemoryModel.destroy({ where, transaction })
+        await PasskeyModel.destroy({ where, transaction })
+        await PrivacyRequestModel.destroy({ where, transaction })
+        await SecurityAnswerModel.destroy({ where, transaction })
+        await WalletModel.destroy({ where, transaction })
+        await UserModel.destroy({ where: { id: userId }, force: true, transaction })
       })
+      for (const [token, session] of Object.entries(security.authenticatedUsers.tokenMap)) {
+        if (session.data.id === userId) delete security.authenticatedUsers.tokenMap[token]
+      }
+      delete security.authenticatedUsers.idMap[userId]
 
       res.clearCookie('token')
 
