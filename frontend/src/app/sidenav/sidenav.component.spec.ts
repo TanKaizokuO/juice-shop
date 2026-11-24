@@ -55,11 +55,13 @@ describe('SidenavComponent', () => {
         userService = {
             whoAmI: vi.fn().mockName("UserService.whoAmI"),
             getLoggedInState: vi.fn().mockName("UserService.getLoggedInState"),
-            saveLastLoginIp: vi.fn().mockName("UserService.saveLastLoginIp")
+            saveLastLoginIp: vi.fn().mockName("UserService.saveLastLoginIp"),
+            logout: vi.fn().mockName("UserService.logout")
         }
         userService.whoAmI.mockReturnValue(of({}))
         userService.getLoggedInState.mockReturnValue(of(true))
         userService.saveLastLoginIp.mockReturnValue(of({}))
+        userService.logout.mockReturnValue(of({}))
         userService.isLoggedIn = {
             next: vi.fn().mockName("userService.isLoggedIn.next")
         }
@@ -188,6 +190,11 @@ describe('SidenavComponent', () => {
     it('should set the login status to be false via UserService', () => {
         component.logout()
         expect(userService.isLoggedIn.next).toHaveBeenCalledWith(false)
+    })
+
+    it('should ask the server to clear the token cookie', () => {
+        component.logout()
+        expect(userService.logout).toHaveBeenCalled()
     })
 
     it('should save the last login IP address', () => {

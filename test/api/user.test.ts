@@ -327,3 +327,17 @@ void describe('/rest/user/whoami', () => {
     assert.equal(typeof res.body.user.password, 'string')
   })
 })
+
+void describe('/rest/user/logout', () => {
+  void it('POST logout expires the token cookie with the attributes it was set with', async () => {
+    const res = await request(app).post('/rest/user/logout')
+    assert.equal(res.status, 200)
+    const cookie = (res.headers['set-cookie'] as unknown as string[]).find((c) => c.startsWith('token='))
+    assert.ok(cookie)
+    assert.match(cookie, /Expires=Thu, 01 Jan 1970/)
+    assert.match(cookie, /HttpOnly/)
+    assert.match(cookie, /Secure/)
+    assert.match(cookie, /SameSite=Strict/)
+    assert.match(cookie, /Path=\//)
+  })
+})
